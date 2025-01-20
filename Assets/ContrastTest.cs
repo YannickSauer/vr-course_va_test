@@ -3,27 +3,30 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
 
-public class VisualAcuityTest : MonoBehaviour
+public class ContrastTest : MonoBehaviour
 {
     public string participant; // participant name, used for creating output file
     int[] stimulusDirection; // array for the different directions for each trial
     int[] response; // save the response of the participant for each trial
-    float[] stimulusSize; // save the size of the stimulus for each trial
+    float[] stimulusContrast; // save the contrast for each trial
     float[] reactionTime; // save the reaction time of the participant for each trial
     int trial = 0; // current trial
     public int maxTrials; // stop measurement after maxTrials
     GameObject stimulus; // gameObject for accessing the stimulus size and direction
+    GameObject filter; // gameOBject for accessing the filter that controls stimulus Contrast
+    public float alpha = 0; // alpha value for the transparency of the filter
     bool measurementStarted = false; // indicates if measurement has started
     float startTime; // measure time at start of trial
     float endTime; // measure time after response
     void Start()
     {
         stimulus = GameObject.Find("Stimulus");
+        filter = GameObject.Find("Filter");
         // initialize the arrays
         stimulusDirection = new int[maxTrials];
         response = new int[maxTrials];
-        stimulusSize = new float[maxTrials];
         reactionTime = new float[maxTrials];
+        stimulusContrast = new float[maxTrials];
     }
 
     // Update is called once per frame
@@ -78,8 +81,9 @@ public class VisualAcuityTest : MonoBehaviour
         measurementStarted = true;
         trial = 0;
         ChangeStimulus(); // new random direction
-        // save the initial size
-        stimulusSize[trial] = stimulus.transform.localScale.x;
+        stimulusContrast[trial] = 1 - alpha;
+        // adjust the alpha value of the filter by setting the color value of the filter (Red, Green, Blur, Alpha)
+        filter.GetComponent<Renderer>().material.SetColor("_Color", new Color(0.5f, 0.5f, 0.5f, alpha));
     }
 
     void ChangeStimulus()
@@ -100,31 +104,69 @@ public class VisualAcuityTest : MonoBehaviour
         response[trial] = currentResponse; // save the current response to the response array
         if(currentResponse == stimulusDirection[trial]) // check if response fits to stimulusDirection
         {
+            trial++; // increase trial counter
             Debug.Log("Correct response!");
-            stimulus.transform.localScale /= 1.25f;
+            if(trial == maxTrials) // we reached maxTrials -> stop measurement 
+            {
+                StopMeasurement();
+            }
+            stimulusContrast[trial] = DecreaseContrast();
         }
         else // incorrect response
         {
+            trial++; // increase trial counter
             Debug.Log("Incorrect response!");
-            stimulus.transform.localScale *= 1.25f;
+            if(trial == maxTrials) // we reached maxTrials -> stop measurement 
+            {
+                StopMeasurement();
+            }
+            stimulusContrast[trial] = IncreaseContrast();
         }
         // trial is over -> next trial
-        trial++; // increase trial counter
-        if(trial == maxTrials) // we reached maxTrials -> stop measurement 
-        {
-            StopMeasurement();
-        }
-        else
-        {
-            stimulusSize[trial] = stimulus.transform.localScale.x; // save the current stimulus size
-        }
+        
         ChangeStimulus();
+    }
+    float DecreaseContrast()
+    {
+        // alpha -> currentContrast -> decrease -> set alpha to reduced contrast
+        float contrast = 1 - alpha;
+        // reduce contrast:
+        contrast = contrast - 0.1f;
+        if (contrast < 0f) // preventing negative contrast
+        {
+            contrast = 0f;
+        }
+        alpha = 1 - contrast; // calculate alpha for new, reduced contrast
+        Debug.Log(contrast);
+        Debug.Log(alpha);
+        // set color of the filter object
+        filter.GetComponent<Renderer>().material.SetColor("_Color", new Color(0.5f,0.5f,0.5f, alpha ));
+        return contrast;
+    }
+
+    float IncreaseContrast()
+    {
+        // alpha -> currentContrast -> decrease -> set alpha to reduced contrast
+        float contrast = 1 - alpha;
+        // reduce contrast:
+        contrast = contrast + 0.1f;
+        if (contrast > 1f) // preventing negative contrast
+        {
+            contrast = 1f;
+        }
+        alpha = 1 - contrast; // calculate alpha for new, reduced contrast
+        Debug.Log(alpha);
+
+        // set color of the filter object
+        filter.GetComponent<Renderer>().material.SetColor("_Color", new Color(0.5f,0.5f,0.5f, alpha ));
+        return contrast;
     }
 
     void StopMeasurement()
     {
-        Debug.Log("Measurement is done. Final stimulus size: " + stimulus.transform.localScale.x); // print final stimulus size
-        stimulus.transform.localScale = new Vector3(1,1,1); // reset stimulus size
+        Debug.Log("Measurement is done. Final stimulus contrast: " + stimulusContrast[maxTrials-1]); // print final stimulus size
+        // reset alpha
+        alpha = 0;
         trial = 0; // reset trial counter to start new measurement
         measurementStarted = false;
         SaveData();
@@ -134,11 +176,11 @@ public class VisualAcuityTest : MonoBehaviour
     {
         StreamWriter sw = new StreamWriter("./measurements/" + participant + ".csv");
         sw.WriteLine("participant: " + participant); // save participant name
-        sw.WriteLine("trial,stimulusDirection,response,stimulusSize,reactionTime"); // header line
+        sw.WriteLine("trial,stimulusDirection,response,stimulusContrast,reactionTime"); // header line
         for(int i = 0; i < maxTrials; i++)
         {
             sw.WriteLine(i + ","  + stimulusDirection[i] + "," + response[i]
-                           + "," + stimulusSize[i] + "," + reactionTime[i]);
+                           + "," + stimulusContrast[i] + "," + reactionTime[i]);
         }
         sw.Close(); // close file and save changes
     }
